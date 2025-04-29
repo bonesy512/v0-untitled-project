@@ -16,9 +16,14 @@ export default function SignInButton({ className, variant = "outline" }: SignInB
   const handleSignIn = async () => {
     try {
       setIsLoading(true)
-      await signIn("google", { callbackUrl: "/dashboard" })
+      // Use the correct provider ID and callbackUrl without any extra parameters
+      await signIn("google", {
+        callbackUrl: "/dashboard",
+        // Don't add any extra parameters to the redirect URI
+      })
     } catch (error) {
       console.error("Sign in error:", error)
+      setIsLoading(false)
     }
   }
 

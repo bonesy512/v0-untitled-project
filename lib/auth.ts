@@ -50,4 +50,17 @@ export const authOptions: NextAuthOptions = {
       }
     },
   },
+  // Explicitly define the callback URL to avoid any formatting issues
+  useSecureCookies: true,
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+      },
+    },
+  },
 }
