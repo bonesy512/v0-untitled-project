@@ -4,6 +4,7 @@ import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 interface SignInButtonProps {
   className?: string
@@ -12,15 +13,23 @@ interface SignInButtonProps {
 
 export default function SignInButton({ className, variant = "outline" }: SignInButtonProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
 
   const handleSignIn = async () => {
     try {
       setIsLoading(true)
-      // Use the correct provider ID and callbackUrl without any extra parameters
-      await signIn("google", {
-        callbackUrl: "/dashboard",
-        // Don't add any extra parameters to the redirect URI
+      // Use the correct provider ID and callbackUrl
+      const result = await signIn("google", {
+        redirect: false, // Don't automatically redirect
       })
+
+      if (result?.error) {
+        console.error("Sign in error:", result.error)
+        setIsLoading(false)
+      } else if (result?.url) {
+        // Manually redirect to avoid any potential issues
+        router.push("/dashboard")
+      }
     } catch (error) {
       console.error("Sign in error:", error)
       setIsLoading(false)

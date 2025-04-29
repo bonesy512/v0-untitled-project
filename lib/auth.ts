@@ -7,9 +7,12 @@ export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db),
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   pages: {
     signIn: "/",
+    signOut: "/",
+    error: "/", // Error code passed in query string as ?error=
   },
   providers: [
     GoogleProvider({
@@ -25,7 +28,6 @@ export const authOptions: NextAuthOptions = {
         session.user.email = token.email
         session.user.image = token.picture
       }
-
       return session
     },
     async jwt({ token, user }) {
@@ -50,17 +52,5 @@ export const authOptions: NextAuthOptions = {
       }
     },
   },
-  // Explicitly define the callback URL to avoid any formatting issues
-  useSecureCookies: true,
-  cookies: {
-    sessionToken: {
-      name: `next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: true,
-      },
-    },
-  },
+  debug: process.env.NODE_ENV === "development",
 }
