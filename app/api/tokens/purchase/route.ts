@@ -2,6 +2,16 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getStripe } from "@/lib/stripe"
+import { absoluteUrl } from "@/lib/utils"
+import prisma from "@/lib/db"
+
+// Define the token packages with their Stripe price IDs
+// Replace these with your actual Stripe price IDs
+const TOKEN_PRICES = {
+  price_5_tokens: "price_1OxYaJJHRTVHmbHmQwYgGjL2", // Replace with your actual Stripe price ID
+  price_10_tokens: "price_1OxYaZJHRTVHmbHmQwYgGjL2", // Replace with your actual Stripe price ID
+  price_25_tokens: "price_1OxYapJHRTVHmbHmQwYgGjL2", // Replace with your actual Stripe price ID
+}
 
 export async function POST(req: Request) {
   try {
@@ -17,33 +27,56 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { tokenAmount, returnUrl } = body
+    const { tokenAmount, priceId } = body
 
-    if (!tokenAmount) {
-      return new NextResponse("Token amount is required", { status: 400 })
+    if (!tokenAmount || !priceId || !TOKEN_PRICES[priceId]) {
+      return new NextResponse("Invalid request parameters", { status: 400 })
     }
 
-    // Calculate price based on token amount
-    const pricePerToken = 0.5 // $0.50 per token
-    const totalAmount = Math.round(tokenAmount * pricePerToken * 100) // in cents
+    // Create a Stripe customer if one doesn't exist
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: { subscription: true },
+    })
 
+    let customerId = user?.subscription?.stripeCustomerId
+
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: session.user.email!,
+        name: session.user.name || undefined,
+        metadata: {
+          userId: session.user.id,
+        },
+      })
+
+      customerId = customer.id
+
+      // Save the customer ID to the database
+      await prisma.subscription.create({
+        data: {
+          userId: session.user.id,
+          stripeCustomerId: customerId,
+          status: "inactive",
+        },
+      })
+    }
+
+    // Create a checkout session
     const stripeSession = await stripe.checkout.sessions.create({
-      success_url: returnUrl || `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?canceled=true`,
-      mode: "payment",
+      customer: customerId,
+      payment_method_types: ["card"],
+      billing_address_collection: "auto",
       line_items: [
         {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `${tokenAmount} Insight Tokens`,
-              description: "Tokens for AI relationship insights",
-            },
-            unit_amount: totalAmount,
-          },
+          price: TOKEN_PRICES[priceId],
           quantity: 1,
         },
       ],
+      mode: "payment",
+      allow_promotion_codes: true,
+      success_url: absoluteUrl(`/dashboard?success=true&tokens=${tokenAmount}`),
+      cancel_url: absoluteUrl("/dashboard?canceled=true"),
       metadata: {
         userId: session.user.id,
         tokenAmount: tokenAmount.toString(),

@@ -1,33 +1,71 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { signOut } from "next-auth/react"
-import { useSubscription } from "@/components/subscription-provider"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import SituationshipDecoder from "@/components/situationship-decoder"
 import DailyCheckIn from "@/components/daily-check-in"
 import RelationshipInsights from "@/components/relationship-insights"
-import SubscriptionPlans from "@/components/subscription-plans"
-import { CreditCard, LogOut, Award, Sparkles, Coins } from "lucide-react"
+import SubscriptionPlans from "@/components/subscription/subscription-plans"
+import UserProfile from "@/components/user/user-profile"
+import { useSearchParams } from "next/navigation"
 
-export default function Dashboard({ user, subscription }) {
-  const router = useRouter()
-  const { isSubscribed, tokens, refreshTokens } = useSubscription()
+interface DashboardProps {
+  user: {
+    id: string
+    name?: string | null
+    email?: string | null
+    image?: string | null
+  }
+  subscription: {
+    isActive: boolean
+    expiresAt?: Date | null
+  }
+}
+
+export default function Dashboard({ user, subscription }: DashboardProps) {
   const { toast } = useToast()
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState("decoder")
+  const [tokens, setTokens] = useState(0)
   const [streakDays, setStreakDays] = useState(0)
-  const [lastCheckIn, setLastCheckIn] = useState(null)
+  const [lastCheckIn, setLastCheckIn] = useState<string | null>(null)
 
+  // Check for success or canceled URL parameters
   useEffect(() => {
-    // Fetch user streak and last check-in data
-    const fetchUserData = async () => {
+    const success = searchParams.get("success")
+    const canceled = searchParams.get("canceled")
+    const tokensAdded = searchParams.get("tokens")
+
+    if (success === "true") {
+      if (tokensAdded) {
+        toast({
+          title: "Purchase Successful",
+          description: `${tokensAdded} tokens have been added to your account.`,
+        })
+      } else {
+        toast({
+          title: "Subscription Successful",
+          description: "Your premium subscription is now active.",
+        })
+      }
+    } else if (canceled === "true") {
+      toast({
+        title: "Purchase Canceled",
+        description: "Your purchase was canceled. No charges were made.",
+        variant: "destructive",
+      })
+    }
+  }, [searchParams, toast])
+
+  // Fetch user stats
+  useEffect(() => {
+    const fetchUserStats = async () => {
       try {
         const response = await fetch("/api/user/stats")
         const data = await response.json()
+
+        setTokens(data.tokens)
         setStreakDays(data.streakDays)
         setLastCheckIn(data.lastCheckIn)
       } catch (error) {
@@ -35,46 +73,18 @@ export default function Dashboard({ user, subscription }) {
       }
     }
 
-    fetchUserData()
+    fetchUserStats()
   }, [])
 
-  const handlePurchaseTokens = async (amount) => {
-    try {
-      const response = await fetch("/api/tokens/purchase", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tokenAmount: amount }),
-      })
-
-      const data = await response.json()
-
-      if (data.url) {
-        router.push(data.url)
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to initiate token purchase",
-        variant: "destructive",
-      })
-    }
-  }
-
   const handleCheckInComplete = async () => {
-    // Update streak and last check-in
-    await refreshTokens()
-
-    // Fetch updated stats
+    // Refresh user stats after check-in
     try {
       const response = await fetch("/api/user/stats")
       const data = await response.json()
+
+      setTokens(data.tokens)
       setStreakDays(data.streakDays)
       setLastCheckIn(data.lastCheckIn)
-
-      toast({
-        title: "Check-in complete!",
-        description: `You've maintained a ${data.streakDays}-day streak!`,
-      })
     } catch (error) {
       console.error("Failed to update stats:", error)
     }
@@ -87,101 +97,42 @@ export default function Dashboard({ user, subscription }) {
           <h1 className="font-bold text-xl bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-pink-600">
             Situationship Decoder
           </h1>
-
-          <div className="flex items-center gap-4">
-            {isSubscribed ? (
-              <span className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-2 py-1 rounded-full flex items-center">
-                <Sparkles className="h-3 w-3 mr-1" /> Premium
-              </span>
-            ) : (
-              <span className="text-xs flex items-center">
-                <Coins className="h-3 w-3 mr-1 text-amber-500" /> {tokens} tokens
-              </span>
-            )}
-
-            <Button variant="ghost" size="sm" onClick={() => signOut({ callbackUrl: "/" })}>
-              <LogOut className="h-4 w-4 mr-1" /> Sign out
-            </Button>
-          </div>
         </div>
       </header>
 
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-500">Daily Streak</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center">
-                <Award className="h-8 w-8 text-amber-500 mr-2" />
-                <div>
-                  <p className="text-2xl font-bold">{streakDays} days</p>
-                  <p className="text-xs text-gray-500">
-                    {lastCheckIn ? `Last check-in: ${new Date(lastCheckIn).toLocaleDateString()}` : "No check-ins yet"}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="md:col-span-2">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid grid-cols-4 mb-4">
+                <TabsTrigger value="decoder">Decoder</TabsTrigger>
+                <TabsTrigger value="check-in">Daily Check-in</TabsTrigger>
+                <TabsTrigger value="insights">Insights</TabsTrigger>
+                <TabsTrigger value="subscription">Subscription</TabsTrigger>
+              </TabsList>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-500">Subscription</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center">
-                <CreditCard className="h-8 w-8 text-purple-500 mr-2" />
-                <div>
-                  <p className="text-lg font-bold">{isSubscribed ? "Premium" : "Free"}</p>
-                  <p className="text-xs text-gray-500">{isSubscribed ? "Unlimited insights" : "Limited insights"}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              <TabsContent value="decoder">
+                <SituationshipDecoder />
+              </TabsContent>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-500">Insight Tokens</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <Coins className="h-8 w-8 text-amber-500 mr-2" />
-                  <p className="text-2xl font-bold">{tokens}</p>
-                </div>
-                <Button size="sm" onClick={() => handlePurchaseTokens(10)}>
-                  Buy More
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              <TabsContent value="check-in">
+                <DailyCheckIn onComplete={handleCheckInComplete} lastCheckIn={lastCheckIn} />
+              </TabsContent>
+
+              <TabsContent value="insights">
+                <RelationshipInsights />
+              </TabsContent>
+
+              <TabsContent value="subscription">
+                <SubscriptionPlans currentPlan={subscription.isActive ? "premium" : "free"} tokens={tokens} />
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          <div>
+            <UserProfile user={user} subscription={subscription} tokens={tokens} streakDays={streakDays} />
+          </div>
         </div>
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-4 mb-4">
-            <TabsTrigger value="decoder">Decoder</TabsTrigger>
-            <TabsTrigger value="check-in">Daily Check-in</TabsTrigger>
-            <TabsTrigger value="insights">Insights</TabsTrigger>
-            <TabsTrigger value="subscription">Subscription</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="decoder">
-            <SituationshipDecoder />
-          </TabsContent>
-
-          <TabsContent value="check-in">
-            <DailyCheckIn onComplete={handleCheckInComplete} lastCheckIn={lastCheckIn} />
-          </TabsContent>
-
-          <TabsContent value="insights">
-            <RelationshipInsights isSubscribed={isSubscribed} tokens={tokens} onTokensUpdated={refreshTokens} />
-          </TabsContent>
-
-          <TabsContent value="subscription">
-            <SubscriptionPlans currentPlan={isSubscribed ? "premium" : "free"} />
-          </TabsContent>
-        </Tabs>
       </div>
     </div>
   )

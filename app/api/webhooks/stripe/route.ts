@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { headers } from "next/headers"
 import { getStripe } from "@/lib/stripe"
 import { db } from "@/lib/db"
 
@@ -13,15 +14,14 @@ export async function POST(req: Request) {
     }
 
     const body = await req.text()
-    const signature = req.headers.get("stripe-signature") as string
+    const signature = headers().get("stripe-signature") as string
+
+    if (!webhookSecret) {
+      return new NextResponse("Webhook secret is not configured", { status: 503 })
+    }
 
     let event
-
     try {
-      if (!webhookSecret) {
-        return new NextResponse("Webhook secret is not configured", { status: 503 })
-      }
-
       event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
     } catch (err) {
       console.error(`⚠️ Webhook signature verification failed.`, err)

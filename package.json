@@ -60,13 +60,13 @@
     "zod": "latest",
     "@auth/core": "latest",
     "nodemailer": "latest",
-    "@prisma/client": "latest",
     "prisma": "latest",
+    "@prisma/client": "latest",
     "next-auth": "latest",
-    "@auth/prisma-adapter": "latest",
     "stripe": "latest",
     "ai": "latest",
-    "@ai-sdk/openai": "latest"
+    "@ai-sdk/openai": "latest",
+    "@auth/prisma-adapter": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",
